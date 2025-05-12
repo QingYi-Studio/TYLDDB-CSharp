@@ -51,6 +51,39 @@ namespace TYLDDB.Utils
         /// 读取文件。(自定义缓冲区)
         /// </summary>
         /// <param name="filePath">File path<br />文件路径</param>
+        /// <param name="buffer">Buffer<br />缓冲区</param>
+        /// <returns>File content<br />文件内容</returns>
+        public static string ReadFile(string filePath, byte[] buffer)
+        {
+            try
+            {
+                StringBuilder fileContent = new StringBuilder();
+
+                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                {
+                    int bytesRead;
+                    while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        // 将每一块数据转换成字符串并累积到 fileContent 中
+                        string chunkContent = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                        fileContent.Append(chunkContent);
+                    }
+                }
+
+                // 返回文件的全部内容
+                return fileContent.ToString();
+            }
+            catch (Exception e)
+            {
+                throw new ReadException(e.Message);
+            }
+        }
+
+        /// <summary>
+        /// Read file.(Custom buffer)<br />
+        /// 读取文件。(自定义缓冲区)
+        /// </summary>
+        /// <param name="filePath">File path<br />文件路径</param>
         /// <param name="bufferSize">Buffer size<br />缓冲区大小</param>
         /// <returns>File content<br />文件内容</returns>
         public static string ReadFile(string filePath, int bufferSize)
@@ -80,5 +113,7 @@ namespace TYLDDB.Utils
                 throw new ReadException(e.Message);
             }
         }
+
+
     }
 }

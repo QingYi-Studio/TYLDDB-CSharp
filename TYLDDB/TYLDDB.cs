@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using TYLDDB.Basic.Exception;
 using TYLDDB.Utils;
@@ -61,6 +62,20 @@ namespace TYLDDB
         /// 从文件中读取内容
         /// </summary>
         public void ReadingFile() => _fileContent = Reader.ReadFile(FilePath);
+
+        /// <summary>
+        /// Read the contents from the file<br/>
+        /// 从文件中读取内容
+        /// </summary>
+        /// <param name="buffer">Buffer<br />缓冲区</param>
+        public void ReadingFile(byte[] buffer) => _fileContent = Reader.ReadFile(FilePath, buffer);
+
+        /// <summary>
+        /// Read the contents from the file<br/>
+        /// 从文件中读取内容
+        /// </summary>
+        /// <param name="buffer">Buffer size<br />缓冲区大小</param>
+        public void ReadingFile(int buffer) => _fileContent = Reader.ReadFile(FilePath, buffer);
 
         /// <summary>
         /// Set the database to load<br/>
