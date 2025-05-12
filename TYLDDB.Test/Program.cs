@@ -16,6 +16,7 @@ class Test
     private readonly LDDB lddb = new();
     private readonly string dbFilePath = "./example.lddb";
     private readonly List<string> testData = [];
+    private byte[] readBuffer = new byte[65536];
 
     public void TestMethod()
     {
@@ -51,7 +52,7 @@ class Test
         HighPrecisionTimer readDbTimer = new(); // 从发起读取文件到成功读取的总时间
         lddb.FilePath = dbFilePath;
         readDbTimer.Start();
-        lddb.ReadingFile();
+        lddb.ReadingFile(readBuffer);
         readDbTimer.Stop();
         WriteTime("从发起读取文件指令到成功读取的总时间为: ", readDbTimer.GetElapsedMilliseconds());
         #endregion
