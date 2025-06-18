@@ -1,0 +1,11 @@
+﻿console::{
+	string::"command_mode"="cmd";
+	int::"int_value"="123";
+	short::"short_value"="32767";
+	long::"long_value"="2147483647";
+	float::"float_value"="3.14";
+	double::"double_value"="3.141592653589793";
+	boolean::"bool"="true";
+	char::"char_value"="A";
+	decimal::decimal_value = 19.99";
+};
