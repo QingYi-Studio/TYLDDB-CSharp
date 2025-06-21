@@ -1,12 +1,11 @@
-﻿using System.Collections.Generic;
+﻿#if NET8_0_OR_GREATER
+using System.Collections.Generic;
 using System;
-using System.Collections.Concurrent;
 using System.Linq;
 using TYLDDB.Basic.Exception;
 
 namespace TYLDDB.Basic
 {
-#if NET8_0_OR_GREATER
     /// <summary>
     /// Three-value dictionary.<br />
     /// 三值字典。
@@ -14,7 +13,7 @@ namespace TYLDDB.Basic
     /// <typeparam name="TValue">The data type of the value.<br />值的数据类型。</typeparam>
     public class TripleDictionary<TValue>
     {
-        private readonly ConcurrentDictionary<Tuple<string, string>, TValue> _dictionary;
+        private readonly Dictionary<Tuple<string, string>, TValue> _dictionary;
 
         /// <summary>
         /// Three-value dictionary.<br />
@@ -22,7 +21,7 @@ namespace TYLDDB.Basic
         /// </summary>
         public TripleDictionary()
         {
-            _dictionary = new ConcurrentDictionary<Tuple<string, string>, TValue>();
+            _dictionary = new Dictionary<Tuple<string, string>, TValue>();
         }
 
         /// <summary>
@@ -118,7 +117,7 @@ namespace TYLDDB.Basic
 
             foreach (var key in keysToRemove)
             {
-                _dictionary.TryRemove(key, out _);
+                _dictionary.Remove(key, out _);
             }
             return true;
         }
@@ -135,7 +134,7 @@ namespace TYLDDB.Basic
             var keyTuple = new Tuple<string, string>(type, key);
 
             // 尝试移除指定的键值对
-            if (_dictionary.TryRemove(keyTuple, out _))
+            if (_dictionary.Remove(keyTuple, out _))
             {
                 return true; // 删除成功
             }
@@ -162,7 +161,7 @@ namespace TYLDDB.Basic
 
             foreach (var keyTuple in keysToRemove)
             {
-                if (_dictionary.TryRemove(keyTuple, out _))
+                if (_dictionary.Remove(keyTuple, out _))
                 {
                     removed = true;
                 }
@@ -183,5 +182,5 @@ namespace TYLDDB.Basic
             }
         }
     }
-#endif
 }
+#endif
