@@ -51,4 +51,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="QingYi.Core" Version="5.2.0-pre6" />
+  </ItemGroup>
+
 </Project>

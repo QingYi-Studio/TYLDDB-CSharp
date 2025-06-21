@@ -1,8 +1,11 @@
-﻿#if NET8_0_OR_GREATER
+#if NET8_0_OR_GREATER
 using System.Collections.Generic;
 using System;
 using System.Linq;
 using TYLDDB.Basic.Exception;
+using System.Threading;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace TYLDDB.Basic
 {
@@ -11,18 +14,26 @@ namespace TYLDDB.Basic
     /// 三值字典。
     /// </summary>
     /// <typeparam name="TValue">The data type of the value.<br />值的数据类型。</typeparam>
-    public class TripleDictionary<TValue>
+    public class TripleDictionary<TValue> : IDisposable
     {
-        private readonly object _lock = new object();
+        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
         private readonly Dictionary<Tuple<string, string>, TValue> _dictionary;
+        private readonly int? _capacity;
+        private readonly ConcurrentDictionary<Tuple<string, string>, TValue> _cache;
+
+        public event EventHandler<TripleDictionaryChangedEventArgs<TValue>> ItemAdded;
+        public event EventHandler<TripleDictionaryChangedEventArgs<TValue>> ItemRemoved;
+        public event EventHandler<TripleDictionaryChangedEventArgs<TValue>> ItemUpdated;
 
         /// <summary>
         /// Three-value dictionary.<br />
         /// 三值字典。
         /// </summary>
-        public TripleDictionary()
+        public TripleDictionary(int? capacity = null)
         {
+            _capacity = capacity;
             _dictionary = new Dictionary<Tuple<string, string>, TValue>();
+            _cache = new ConcurrentDictionary<Tuple<string, string>, TValue>();
         }
 
         /// <summary>
@@ -35,20 +46,47 @@ namespace TYLDDB.Basic
         /// <returns>Whether the value is added successfully.<br />是否成功添加。</returns>
         public bool Add(string type, string key, TValue value)
         {
-            lock (_lock)
+            if (_capacity.HasValue && _dictionary.Count >= _capacity.Value)
             {
-                var keyTuple = new Tuple<string, string>(type, key);
+                throw new TripleDictionaryException("Dictionary capacity exceeded");
+            }
 
-                // 检查是否已经存在相同的键组合
+            var keyTuple = new Tuple<string, string>(type, key);
+
+            try
+            {
+                _lock.EnterWriteLock();
+
                 if (_dictionary.ContainsKey(keyTuple))
                 {
-                    return false; // 如果已存在相同的键组合，返回 false 表示添加失败
+                    return false;
                 }
 
-                // 如果没有该键组合，执行添加操作
                 _dictionary[keyTuple] = value;
-                return true; // 添加成功
+                _cache.TryAdd(keyTuple, value);
+
+                OnItemAdded(type, key, value);
+                return true;
             }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
+
+        public async Task<bool> AddAsync(string type, string key, TValue value)
+        {
+            return await Task.Run(() => Add(type, key, value));
+        }
+
+        public async Task<bool> UpdateValueAsync(string type, string key, TValue newValue)
+        {
+            return await Task.Run(() => UpdateValue(type, key, newValue));
+        }
+
+        public async Task<TValue> GetAsync(string type, string key)
+        {
+            return await Task.Run(() => Get(type, key));
         }
 
         /// <summary>
@@ -87,17 +125,137 @@ namespace TYLDDB.Basic
         /// <exception cref="TripleDictionaryKeyNotFoundException">The specified key was not found.<br />未找到指定的键。</exception>
         public TValue Get(string type, string key)
         {
-            lock (_lock)
+            var keyTuple = new Tuple<string, string>(type, key);
+
+            if (_cache.TryGetValue(keyTuple, out TValue cachedValue))
             {
-                var keyTuple = new Tuple<string, string>(type, key);
+                return cachedValue;
+            }
+
+            try
+            {
+                _lock.EnterReadLock();
+
                 if (_dictionary.TryGetValue(keyTuple, out TValue value))
                 {
+                    _cache.TryAdd(keyTuple, value);
                     return value;
                 }
-                else
+
+                throw new TripleDictionaryKeyNotFoundException("The key combination was not found.");
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        public void AddRange(IEnumerable<(string type, string key, TValue value)> items)
+        {
+            try
+            {
+                _lock.EnterWriteLock();
+
+                foreach (var (type, key, value) in items)
                 {
-                    throw new TripleDictionaryKeyNotFoundException("The key combination was not found.");
+                    if (_capacity.HasValue && _dictionary.Count >= _capacity.Value)
+                    {
+                        throw new TripleDictionaryException("Dictionary capacity exceeded");
+                    }
+
+                    var keyTuple = new Tuple<string, string>(type, key);
+                    if (!_dictionary.ContainsKey(keyTuple))
+                    {
+                        _dictionary[keyTuple] = value;
+                        _cache.TryAdd(keyTuple, value);
+                        OnItemAdded(type, key, value);
+                    }
                 }
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
+
+        protected virtual void OnItemAdded(string type, string key, TValue value)
+        {
+            ItemAdded?.Invoke(this, new TripleDictionaryChangedEventArgs<TValue>(type, key, value, ChangeType.Added));
+        }
+
+        protected virtual void OnItemRemoved(string type, string key, TValue value)
+        {
+            ItemRemoved?.Invoke(this, new TripleDictionaryChangedEventArgs<TValue>(type, key, value, ChangeType.Removed));
+        }
+
+        protected virtual void OnItemUpdated(string type, string key, TValue value)
+        {
+            ItemUpdated?.Invoke(this, new TripleDictionaryChangedEventArgs<TValue>(type, key, value, ChangeType.Updated));
+        }
+
+        public void Dispose()
+        {
+            _lock.Dispose();
+            _cache.Clear();
+            _dictionary.Clear();
+        }
+
+        public void ClearCache()
+        {
+            _cache.Clear();
+        }
+
+        public void InvalidateCache(string type, string key)
+        {
+            var keyTuple = new Tuple<string, string>(type, key);
+            _cache.TryRemove(keyTuple, out _);
+        }
+
+        public IEnumerable<TValue> GetValuesByType(string type)
+        {
+            try
+            {
+                _lock.EnterReadLock();
+                return _dictionary.Where(x => x.Key.Item1 == type)
+                                .Select(x => x.Value)
+                                .ToList();
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        public IEnumerable<string> GetKeysByType(string type)
+        {
+            try
+            {
+                _lock.EnterReadLock();
+                return _dictionary.Where(x => x.Key.Item1 == type)
+                                .Select(x => x.Key.Item2)
+                                .ToList();
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        public int CacheSize => _cache.Count;
+        public bool IsCacheEnabled => true;
+        public int Capacity => _capacity ?? -1;
+
+        public Dictionary<string, int> GetTypeStatistics()
+        {
+            try
+            {
+                _lock.EnterReadLock();
+                return _dictionary.GroupBy(x => x.Key.Item1)
+                                .ToDictionary(g => g.Key, g => g.Count());
+            }
+            finally
+            {
+                _lock.ExitReadLock();
             }
         }
 
@@ -209,6 +367,29 @@ namespace TYLDDB.Basic
                 }
             }
         }
+    }
+
+    public class TripleDictionaryChangedEventArgs<T> : EventArgs
+    {
+        public string Type { get; }
+        public string Key { get; }
+        public T Value { get; }
+        public ChangeType ChangeType { get; }
+
+        public TripleDictionaryChangedEventArgs(string type, string key, T value, ChangeType changeType)
+        {
+            Type = type;
+            Key = key;
+            Value = value;
+            ChangeType = changeType;
+        }
+    }
+
+    public enum ChangeType
+    {
+        Added,
+        Removed,
+        Updated
     }
 }
 #endif

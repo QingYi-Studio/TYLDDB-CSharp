@@ -9,8 +9,16 @@
     <NuGetAudit>False</NuGetAudit>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <WarningsAsErrors>$(WarningsAsErrors)</WarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <WarningsAsErrors>$(WarningsAsErrors)</WarningsAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="QingYi.Core" Version="5.2.0-pre4o" />
+    <PackageReference Include="QingYi.Core" Version="5.2.0-pre6" />
   </ItemGroup>
 
   <ItemGroup>
