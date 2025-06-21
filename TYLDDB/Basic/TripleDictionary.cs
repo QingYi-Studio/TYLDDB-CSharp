@@ -13,6 +13,7 @@ namespace TYLDDB.Basic
     /// <typeparam name="TValue">The data type of the value.<br />值的数据类型。</typeparam>
     public class TripleDictionary<TValue>
     {
+        private readonly object _lock = new object();
         private readonly Dictionary<Tuple<string, string>, TValue> _dictionary;
 
         /// <summary>
@@ -34,17 +35,20 @@ namespace TYLDDB.Basic
         /// <returns>Whether the value is added successfully.<br />是否成功添加。</returns>
         public bool Add(string type, string key, TValue value)
         {
-            var keyTuple = new Tuple<string, string>(type, key);
-
-            // 检查是否已经存在相同的键组合
-            if (_dictionary.ContainsKey(keyTuple))
+            lock (_lock)
             {
-                return false; // 如果已存在相同的键组合，返回 false 表示添加失败
-            }
+                var keyTuple = new Tuple<string, string>(type, key);
 
-            // 如果没有该键组合，执行添加操作
-            _dictionary[keyTuple] = value;
-            return true; // 添加成功
+                // 检查是否已经存在相同的键组合
+                if (_dictionary.ContainsKey(keyTuple))
+                {
+                    return false; // 如果已存在相同的键组合，返回 false 表示添加失败
+                }
+
+                // 如果没有该键组合，执行添加操作
+                _dictionary[keyTuple] = value;
+                return true; // 添加成功
+            }
         }
 
         /// <summary>
@@ -57,17 +61,20 @@ namespace TYLDDB.Basic
         /// <returns>Whether the update is successful.<br />是否成功更新。</returns>
         public bool UpdateValue(string type, string key, TValue newValue)
         {
-            var keyTuple = new Tuple<string, string>(type, key);
-
-            // 检查该键组合是否存在
-            if (!_dictionary.ContainsKey(keyTuple))
+            lock (_lock)
             {
-                return false; // 如果不存在，返回 false
-            }
+                var keyTuple = new Tuple<string, string>(type, key);
 
-            // 如果存在，更新值
-            _dictionary[keyTuple] = newValue;
-            return true; // 更新成功
+                // 检查该键组合是否存在
+                if (!_dictionary.ContainsKey(keyTuple))
+                {
+                    return false; // 如果不存在，返回 false
+                }
+
+                // 如果存在，更新值
+                _dictionary[keyTuple] = newValue;
+                return true; // 更新成功
+            }
         }
 
         /// <summary>
@@ -80,14 +87,17 @@ namespace TYLDDB.Basic
         /// <exception cref="TripleDictionaryKeyNotFoundException">The specified key was not found.<br />未找到指定的键。</exception>
         public TValue Get(string type, string key)
         {
-            var keyTuple = new Tuple<string, string>(type, key);
-            if (_dictionary.TryGetValue(keyTuple, out TValue value))
+            lock (_lock)
             {
-                return value;
-            }
-            else
-            {
-                throw new TripleDictionaryKeyNotFoundException("The key combination was not found.");
+                var keyTuple = new Tuple<string, string>(type, key);
+                if (_dictionary.TryGetValue(keyTuple, out TValue value))
+                {
+                    return value;
+                }
+                else
+                {
+                    throw new TripleDictionaryKeyNotFoundException("The key combination was not found.");
+                }
             }
         }
 
@@ -98,7 +108,13 @@ namespace TYLDDB.Basic
         /// <param name="type">Data type.<br />数据类型。</param>
         /// <param name="key">Key.<br />键。</param>
         /// <returns>Whether the key is included.<br />是否包含该键。</returns>
-        public bool ContainsKey(string type, string key) => _dictionary.ContainsKey(new Tuple<string, string>(type, key));
+        public bool ContainsKey(string type, string key)
+        {
+            lock (_lock)
+            {
+                return _dictionary.ContainsKey(new Tuple<string, string>(type, key));
+            }
+        }
 
         /// <summary>
         /// Deleting a certain type removes all the key values of the class.<br />
@@ -108,18 +124,21 @@ namespace TYLDDB.Basic
         /// <returns>Whether the data type is removed successfully.<br />是否成功移除该数据类型。</returns>
         public bool RemoveType(string type)
         {
-            var keysToRemove = _dictionary.Keys.Where(k => k.Item1 == type).ToList();
-
-            if (keysToRemove.Count == 0)
+            lock (_lock)
             {
-                return false; // 如果该类型没有键值对，返回 false
-            }
+                var keysToRemove = _dictionary.Keys.Where(k => k.Item1 == type).ToList();
 
-            foreach (var key in keysToRemove)
-            {
-                _dictionary.Remove(key, out _);
+                if (keysToRemove.Count == 0)
+                {
+                    return false; // 如果该类型没有键值对，返回 false
+                }
+
+                foreach (var key in keysToRemove)
+                {
+                    _dictionary.Remove(key, out _);
+                }
+                return true;
             }
-            return true;
         }
 
         /// <summary>
@@ -131,16 +150,19 @@ namespace TYLDDB.Basic
         /// <returns>Whether the key is successfully removed.<br />是否成功移除该键。</returns>
         public bool RemoveKey(string type, string key)
         {
-            var keyTuple = new Tuple<string, string>(type, key);
+            lock (_lock)
+            {
+                var keyTuple = new Tuple<string, string>(type, key);
 
-            // 尝试移除指定的键值对
-            if (_dictionary.Remove(keyTuple, out _))
-            {
-                return true; // 删除成功
-            }
-            else
-            {
-                return false; // 如果没有找到该键组合，返回 false
+                // 尝试移除指定的键值对
+                if (_dictionary.Remove(keyTuple, out _))
+                {
+                    return true; // 删除成功
+                }
+                else
+                {
+                    return false; // 如果没有找到该键组合，返回 false
+                }
             }
         }
 
@@ -152,22 +174,25 @@ namespace TYLDDB.Basic
         /// <returns>Whether the key is successfully removed.<br />是否成功移除该键。</returns>
         public bool RemoveKey(string key)
         {
-            bool removed = false;
-
-            // 查找所有包含该 Key 的项，并删除它们
-            var keysToRemove = _dictionary.Where(entry => entry.Key.Item2 == key)
-                                          .Select(entry => entry.Key)
-                                          .ToList();
-
-            foreach (var keyTuple in keysToRemove)
+            lock (_lock)
             {
-                if (_dictionary.Remove(keyTuple, out _))
-                {
-                    removed = true;
-                }
-            }
+                bool removed = false;
 
-            return removed; // 如果至少删除了一个键值对，返回 true
+                // 查找所有包含该 Key 的项，并删除它们
+                var keysToRemove = _dictionary.Where(entry => entry.Key.Item2 == key)
+                                            .Select(entry => entry.Key)
+                                            .ToList();
+
+                foreach (var keyTuple in keysToRemove)
+                {
+                    if (_dictionary.Remove(keyTuple, out _))
+                    {
+                        removed = true;
+                    }
+                }
+
+                return removed; // 如果至少删除了一个键值对，返回 true
+            }
         }
 
         /// <summary>
@@ -176,9 +201,12 @@ namespace TYLDDB.Basic
         /// </summary>
         public void PrintAll()
         {
-            foreach (var entry in _dictionary)
+            lock (_lock)
             {
-                Console.WriteLine($"Type: {entry.Key.Item1}, Key: {entry.Key.Item2} -> Value: {entry.Value}");
+                foreach (var entry in _dictionary)
+                {
+                    Console.WriteLine($"Type: {entry.Key.Item1}, Key: {entry.Key.Item2} -> Value: {entry.Value}");
+                }
             }
         }
     }
